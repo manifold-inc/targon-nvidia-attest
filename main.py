@@ -57,8 +57,8 @@ class AttestationResponse(BaseModel):
 class Request(BaseModel):
     gpu_remote: Attestation
     switch_remote: Attestation
-    gpu_local_token: Attestation
-    switch_local_token: Attestation
+    gpu_local: Attestation
+    switch_local: Attestation
     expected_nonce: str
 
 
@@ -345,7 +345,7 @@ def attest(req: Request) -> AttestationResponse:
 
         # Verify GPU claims
         gpu_claims, err = extract_gpu_claims_from_token(
-            req.gpu_local_token.token, req.expected_nonce
+            req.gpu_local.token, req.expected_nonce
         )
         if err is not None:
             logger.info(f"Error extracting gpu claims: {err}")
@@ -383,7 +383,7 @@ def attest(req: Request) -> AttestationResponse:
 
         # Verify switch claims
         switch_claims, err = extract_switch_claims_from_token(
-            req.switch_local_token.token, req.expected_nonce
+            req.switch_local.token, req.expected_nonce
         )
         if err is not None:
             logger.info(f"Error extracting switch claims: {err}")
