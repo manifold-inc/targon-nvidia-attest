@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from nv_attestation_sdk import attestation
 from fastapi import FastAPI
 import json
-from typing import Optional, Dict, Any, Tuple, Union
+from typing import Iterable, Optional, Dict, Any, Tuple, Union
 from logconfig import setupLogging
 import jwt
 
@@ -30,13 +30,7 @@ def ping():
     return ""
 
 
-class GPUAttestation(BaseModel):
-    attestation_result: bool
-    token: str
-    valid: bool
-
-
-class SwitchAttestation(BaseModel):
+class Attestation(BaseModel):
     attestation_result: bool
     token: str
     valid: bool
@@ -57,14 +51,87 @@ class AttestationResponse(BaseModel):
     switch_attestation_success: bool
     gpu_claims: Optional[Dict[str, GPUClaims]] | bool = None
     switch_claims: Optional[Dict[str, SwitchClaims]] | bool = None
+    gpu_ids: Iterable[str] = []
 
 
 class Request(BaseModel):
-    gpu_remote: GPUAttestation
-    switch_remote: SwitchAttestation
-    gpu_local_token: str
-    switch_local_token: str
+    gpu_remote: Attestation
+    switch_remote: Attestation
+    gpu_local_token: Attestation
+    switch_local_token: Attestation
     expected_nonce: str
+
+
+def extract_gpu_ids(
+    token_data: Any,
+) -> Union[Tuple[Iterable[str], None], Tuple[None, str]]:
+    """
+    Extract claims from token data using PyJWT.
+
+    Args:
+        token_data: Token data from get_token()
+
+    Returns:
+        Dictionary of claims or empty dict if parsing fails
+    """
+    gpu_ids = []
+    try:
+        # Handle string token (likely in JSON format)
+        if not isinstance(token_data, str):
+            return None, "invalid format"
+        try:
+            # First, try to parse as JSON
+            token_json = json.loads(token_data)
+            if not (
+                isinstance(token_json, list)
+                and len(token_json) >= 2
+                and isinstance(token_json[1], dict)
+            ):
+                return None, "invalid format"
+            for claims_key, claims_val in token_json[1].items():
+                if not (
+                    claims_key == "REMOTE_GPU_CLAIMS"
+                    and isinstance(claims_val, list)
+                    and len(claims_val) >= 2
+                ):
+                    continue
+                gpu_dict = claims_val[1]
+                if not isinstance(gpu_dict, dict):
+                    continue
+                # Now we have a dictionary of GPU-ID to JWT token
+                for gpu_id, gpu_token in gpu_dict.items():
+                    if not gpu_id.startswith("GPU-"):
+                        continue
+                    # For each GPU, extract the claims by decoding the JWT with PyJWT
+                    try:
+                        # Decode without verification (we're just extracting claims)
+                        gpu_token_data = jwt.decode(
+                            gpu_token,
+                            options={"verify_signature": False},
+                            algorithms=[
+                                "ES384",
+                                "HS256",
+                            ],  # Support both NVIDIA's ES384 and test HS256
+                        )
+
+                        # Add this GPU's claims to our results
+                        gpu_id = gpu_token_data.get("ueid")
+                        if gpu_id:
+                            gpu_ids.append(gpu_id)
+
+                    except jwt.PyJWTError as e:
+                        logger.debug(f"Failed to decode JWT for {gpu_id}: {str(e)}")
+                        return None, "Failed decoding JWT"
+
+        except Exception as e:
+            logger.debug(f"Failed to parse token as JSON: {str(e)}")
+            return None, "Failed parsing token as json"
+
+        return gpu_ids, None
+
+    except Exception as e:
+        logger.warning(f"Error extracting claims from token: {str(e)}")
+        return None, "Error extracting claims from token"
 
 
 def extract_gpu_claims_from_token(
@@ -278,7 +345,7 @@ def attest(req: Request) -> AttestationResponse:
 
         # Verify GPU claims
         gpu_claims, err = extract_gpu_claims_from_token(
-            req.gpu_local_token, req.expected_nonce
+            req.gpu_local_token.token, req.expected_nonce
         )
         if err is not None:
             logger.info(f"Error extracting gpu claims: {err}")
@@ -316,7 +383,7 @@ def attest(req: Request) -> AttestationResponse:
 
         # Verify switch claims
         switch_claims, err = extract_switch_claims_from_token(
-            req.switch_local_token, req.expected_nonce
+            req.switch_local_token.token, req.expected_nonce
         )
         if err is not None:
             logger.info(f"Error extracting switch claims: {err}")
@@ -326,7 +393,16 @@ def attest(req: Request) -> AttestationResponse:
             )
 
         switch_client.clear_verifiers()
+        gpu_ids, err = extract_gpu_ids(req.gpu_remote.token)
+        if err is not None or gpu_ids is None:
+            logger.info(f"Error extracting gpu ids: {err}")
+            return AttestationResponse(
+                gpu_attestation_success=True,
+                switch_attestation_success=False,
+            )
+
         res = AttestationResponse(
+            gpu_ids=gpu_ids,
             gpu_attestation_success=True,
             switch_attestation_success=True,
             gpu_claims=gpu_claims,

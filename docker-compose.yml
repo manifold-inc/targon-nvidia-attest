@@ -1,0 +1,8 @@
+services:
+  nvidia-attest: 
+    ports:
+      - "80:80"
+    image: ghcr.io/manifold-inc/targon-nvidia-attest:latest
+    build:
+      context: .
+    restart: always
