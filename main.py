@@ -314,7 +314,7 @@ def extract_switch_claims_from_token(
 
 
 @app.post("/attest", response_model=AttestationResponse)
-def attest(req: Request) -> AttestationResponse:
+async def attest(req: Request) -> AttestationResponse:
     logger.info("getting attest request")
     try:
         # GPU Attestation
