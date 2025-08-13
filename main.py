@@ -3,9 +3,7 @@ from pydantic import BaseModel
 from nv_attestation_sdk import attestation
 from fastapi import FastAPI
 import json
-from typing import Iterable, Optional, Dict, Any, Tuple, Union
 from logconfig import setupLogging
-import jwt
 
 logger = setupLogging()
 
