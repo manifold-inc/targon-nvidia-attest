@@ -36,7 +36,7 @@ app = FastAPI()
 GPU_ATTESTATION_POLICY = load_policy("gpu_remote_policy.json")
 SWITCH_ATTESTATION_POLICY = load_policy("switch_remote_policy.json")
 UEIDS = load_ueids("ueids/ueids.txt")
-print(UEIDS)
+logger.info(UEIDS)
 
 
 @app.get("/")
