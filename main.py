@@ -35,7 +35,7 @@ def load_ueids(filename: str) -> List[str]:
 app = FastAPI()
 GPU_ATTESTATION_POLICY = load_policy("gpu_remote_policy.json")
 SWITCH_ATTESTATION_POLICY = load_policy("switch_remote_policy.json")
-UEIDS = load_ueids("ueids.txt")
+UEIDS = load_ueids("ueids/ueids.txt")
 print(UEIDS)
 
 
