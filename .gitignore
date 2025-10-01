@@ -1,0 +1,4 @@
+*.log
+ueids.txt
+.venv
+__pycache__

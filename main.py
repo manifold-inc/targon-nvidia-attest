@@ -1,9 +1,11 @@
 import sys
+from typing import List
 from pydantic import BaseModel
 from nv_attestation_sdk import attestation
 from fastapi import FastAPI
 import json
 from logconfig import setupLogging
+from extract_ids import extract_gpu_ids
 
 logger = setupLogging()
 
@@ -18,9 +20,23 @@ def load_policy(filename: str) -> str:
         sys.exit()
 
 
+def load_ueids(filename: str) -> List[str]:
+    try:
+        with open(filename, "r") as f:
+            ueids = f.read().strip()
+            ids = ueids.split("\n")
+            ids = [i.strip() for i in ids]
+        return ids
+    except Exception as e:
+        logger.error(f"ueids not found: {e}")
+        sys.exit()
+
+
 app = FastAPI()
 GPU_ATTESTATION_POLICY = load_policy("gpu_remote_policy.json")
 SWITCH_ATTESTATION_POLICY = load_policy("switch_remote_policy.json")
+UEIDS = load_ueids("ueids.txt")
+print(UEIDS)
 
 
 @app.get("/")
@@ -77,6 +93,17 @@ async def attest(req: Request) -> AttestationResponse:
 
         # Set the token from the request
         gpu_client.set_token("HGX-node", req.gpu_remote.token)
+
+        ids, err = extract_gpu_ids(gpu_client.get_token())
+        if err != None or ids == None:
+            return AttestationResponse(
+                gpu_attestation_success=False, switch_attestation_success=False
+            )
+        for i in ids:
+            if i in UEIDS:
+                return AttestationResponse(
+                    gpu_attestation_success=False, switch_attestation_success=False
+                )
 
         # Validate GPU token with policy
         if not gpu_client.validate_token(GPU_ATTESTATION_POLICY):
