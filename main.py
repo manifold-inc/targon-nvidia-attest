@@ -29,7 +29,7 @@ def load_ueids(filename: str) -> List[str]:
         return ids
     except Exception as e:
         logger.error(f"ueids not found: {e}")
-        sys.exit()
+        return []
 
 
 app = FastAPI()
